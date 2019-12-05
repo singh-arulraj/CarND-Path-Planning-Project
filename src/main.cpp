@@ -31,6 +31,7 @@ int main() {
 #define MAX_ACC          0.224
 #define TIME_STEP        0.02
 #define MPH_TO_MPS       0.447
+#define LANE_SIZE        4
     int lane = 1;
     double       ref_vel          = 0.0; // In mph
     /***********************************************
@@ -125,21 +126,58 @@ int main() {
                 car_s = end_path_s;
             }
             bool too_close = false;
+            bool too_close_right = false;
+            bool too_close_left = false;
+            int veh_lane;
             for (int i = 0; i < sensor_fusion.size(); i++) {
                 float d = sensor_fusion[i][6];
-                if ((d < (2 + 4 * lane +2)) && (d > (2 + 4 * lane - 2))) {
+                veh_lane = d / LANE_SIZE;
+                if (((lane == 0) && (veh_lane == 2)) || ((lane == 2) && (veh_lane == 0))|| (veh_lane > 2)) {
+                    //Neighbour vehicle in extreme lane, not ifinterest
+                    continue;
+                }
+                //if ((d < (2 + LANE_SIZE * lane +2)) && (d > (2 + LANE_SIZE * lane - 2))) {
+                if ((d < (2 + LANE_SIZE * 2 +2)) && (d > (2 + LANE_SIZE * lane - 2))) {
                     double vx = sensor_fusion[i][3];
                     double vy = sensor_fusion[i][4];
                     double check_speed = sqrt(vx*vx + vy*vy);
                     double check_car_s = sensor_fusion[i][5];
                     check_car_s += ((double)(prev_size) * TIME_STEP * check_speed);
-                    if ((check_car_s > car_s) && ((check_car_s -car_s) < 30)) {
-                        too_close = true;
+                    if (lane == veh_lane) {
+                        if ((check_car_s > car_s) && ((check_car_s -car_s) < 30)) {
+                            too_close = true;
+                        }
+                    } else if ((fabs(check_car_s -car_s) < 30)) {
+                        if (veh_lane > lane) {
+                            too_close_left = true;
+                        } else {
+                            too_close_right = true;
+                        }
                     }
                 }
             }
             if (too_close) {
-                ref_vel -= 0.224;
+                if (lane == 0) {
+                    too_close_right = true;
+                } else if (lane == 2) {
+                    too_close_left = true;
+                }
+                /*
+                if (ref_vel > 30) {
+                    ref_vel -= 0.224;
+                } else*/ {
+                    if (too_close_right && too_close_left) {
+                        ref_vel -= 0.224;
+                    } else {
+                        if (too_close_left) {
+                            lane --;
+                            printf("Lane Changed Right New Lane Number = %d", lane);
+                        } else {
+                            lane++;
+                            printf("Lane Changed Left New Lane Number = %d", lane);
+                        }
+                        std::cout << lane << "\n";
+                    } }
             } else {
                 ref_vel = (ref_vel < 49.5) ? (ref_vel + 0.224):ref_vel;
             }
@@ -240,23 +278,23 @@ int main() {
             }  // end websocket if
             }); // end h.onMessage
 
-    h.onConnection([&h](uWS::WebSocket<uWS::SERVER> ws, uWS::HttpRequest req) {
-            std::cout << "Connected!!!" << std::endl;
-            });
+            h.onConnection([&h](uWS::WebSocket<uWS::SERVER> ws, uWS::HttpRequest req) {
+                    std::cout << "Connected!!!" << std::endl;
+                    });
 
-    h.onDisconnection([&h](uWS::WebSocket<uWS::SERVER> ws, int code,
-                char *message, size_t length) {
-            ws.close();
-            std::cout << "Disconnected" << std::endl;
-            });
+            h.onDisconnection([&h](uWS::WebSocket<uWS::SERVER> ws, int code,
+                        char *message, size_t length) {
+                    ws.close();
+                    std::cout << "Disconnected" << std::endl;
+                    });
 
-    int port = 4567;
-    if (h.listen(port)) {
-        std::cout << "Listening to port " << port << std::endl;
-    } else {
-        std::cerr << "Failed to listen to port" << std::endl;
-        return -1;
-    }
+            int port = 4567;
+            if (h.listen(port)) {
+                std::cout << "Listening to port " << port << std::endl;
+            } else {
+                std::cerr << "Failed to listen to port" << std::endl;
+                return -1;
+            }
 
-    h.run();
-}
+            h.run();
+            }
